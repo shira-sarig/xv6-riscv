@@ -141,6 +141,13 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+// 2.1.2 Updating process creation behavior
+//initialize all signal handlers to be default handler
+  int sig;
+  for(sig = 0; sig < NSIGS; sig++) {
+    p->sig_handlers[sig] = (void*)SIG_DFL;
+  }
+
   return p;
 }
 
@@ -304,6 +311,16 @@ fork(void)
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
+
+// 2.1.2 Updating process creation behavior
+np->sig_mask = p->sig_mask;
+
+//deep copy parent signal handlers
+  int sig;
+  for(sig = 0; sig < NSIGS; sig++) {
+    np->sig_handlers[sig] = p->sig_handlers[sig];
+    np->sig_handlers_masks[sig] = p->sig_handlers_masks[sig];
+  }
 
   release(&np->lock);
 

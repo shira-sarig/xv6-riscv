@@ -98,7 +98,7 @@ struct proc {
   uint sig_mask;                        // Signal masks
   void* sig_handlers[NSIGS];            // Signal handlers
   struct trapframe *user_trap_backup;   // Backup of user trapframe
-
+  uint sig_handlers_masks[NSIGS];       // Masks for each signal handler
 
   // proc_tree_lock must be held when using this:
   struct proc *parent;         // Parent process
