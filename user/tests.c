@@ -193,9 +193,20 @@ int test4_check_sigaction_handler_update() {
 }
 
 
-// void test5_check_sending_signals() {
-    
-// }
+int test5_check_sending_signals() {
+    int pid = fork();
+    if (pid == 0) {
+        while(1) {
+            sleep(10);
+        }
+    }
+    else {
+        kill(pid, SIGKILL);
+        int status;
+        wait(&status);
+    }
+    return 0;
+}
 
 int
 main(int argc, char *argv[]){
@@ -208,6 +219,7 @@ main(int argc, char *argv[]){
         {test2_check_sigaction_mask_failure, "test2_check_sigaction_mask_failure"},
         {test3_check_sigprocmask, "test3_check_sigprocmask"},
         {test4_check_sigaction_handler_update, "test4_check_sigaction_handler_update"},
+        {test5_check_sending_signals, "test5_check_sending_signals"},
         {0,0}
     };
 
