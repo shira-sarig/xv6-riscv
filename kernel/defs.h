@@ -107,6 +107,7 @@ int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 uint            sigprocmask(uint);
 int             sigaction(int, uint64 act, uint64 oldact);
+void            sigret(void);
 
 // swtch.S
 void            swtch(struct context*, struct context*);

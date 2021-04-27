@@ -100,6 +100,10 @@ struct proc {
   struct trapframe *user_trap_backup;   // Backup of user trapframe
   uint sig_handlers_masks[NSIGS];       // Masks for each signal handler
 
+  // 2.1.5 fields for the sigret system call
+  int in_signal_handler;                // Flag to indicate whether the process is handling a signal and needs to block handling other signals
+  uint prev_sig_mask;                   // Holds process sigmask while process is running a signal handler
+
   // proc_tree_lock must be held when using this:
   struct proc *parent;         // Parent process
 

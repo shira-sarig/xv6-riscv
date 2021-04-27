@@ -716,3 +716,18 @@ sigaction(int signum, uint64 act, uint64 oldact)
   release(&p->lock);
   return 0;
 }
+
+// 2.1.5 The sigret system call
+void
+sigret(void)
+{
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  // Restore the process original trapframe
+  memmove(p->trapframe, p->user_trap_backup, sizeof(struct trapframe));
+  // Restore the process original signal mask
+  p->sig_mask = p->prev_sig_mask;
+  // Turn off the flag indicates a user space signal handling for blocking incoming signals at this time.
+  p->in_signal_handler = 0;
+  release(&p->lock);
+}

@@ -29,6 +29,8 @@ int uptime(void);
 int sigprocmask(uint);
 //2.1.4 Registering Signal Handlers
 int sigaction (int, const struct sigaction*, struct sigaction*);
+// 2.1.5 The sigret system call
+void sigret(void);
 
 // ulib.c
 int stat(const char*, struct stat*);

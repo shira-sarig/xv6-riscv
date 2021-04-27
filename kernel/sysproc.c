@@ -121,3 +121,11 @@ sys_sigaction(void)
 
   return sigaction(signum, act, old);
 }
+
+// 2.1.5 The sigret system call
+uint64
+sys_sigret(void)
+{
+  sigret();
+  return 0;
+}
