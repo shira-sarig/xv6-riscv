@@ -11,7 +11,8 @@ main(int argc, char **argv)
     fprintf(2, "usage: kill pid...\n");
     exit(1);
   }
-  for(i=1; i<argc; i++)
-    kill(atoi(argv[i]));
+  // 2.2.1 Updating the kill system call
+  for(i=1; i<argc-1; i+=2)
+    kill(atoi(argv[i]), atoi(argv[i+1]));
   exit(0);
 }

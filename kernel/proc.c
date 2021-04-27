@@ -20,6 +20,10 @@ static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
 
+// 2.4 Handling Signals
+extern void* sig_ret_start(void);
+extern void* sig_ret_end(void);
+
 // helps ensure that wakeups of wait()ing
 // parents are not lost. helps obey the
 // memory model when using p->parent.
@@ -731,4 +735,111 @@ sigret(void)
   // Turn off the flag indicates a user space signal handling for blocking incoming signals at this time.
   p->in_signal_handler = 0;
   release(&p->lock);
+}
+
+// 2.3 Implement kernel space signals
+void
+sigkill_handler()
+{
+  printf("in kill handler\n");
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  p->killed = 1;
+  if(p->state == SLEEPING){
+    // Wake process from sleep().
+    p->state = RUNNABLE;
+  }
+  p->pending_signals = p->pending_signals & !(1 << SIGKILL);
+  release(&p->lock);
+}
+
+void
+sigcont_handler()
+{
+  struct proc *p = myproc();
+  acquire(&p->lock);
+
+ // If no SIGSTOP in pending signals turn off cont signal bit
+  if (((1 << SIGSTOP) & p->pending_signals) == 0)
+    p->pending_signals = p->pending_signals & !(1 << SIGCONT);
+  
+  release(&p->lock);
+}
+
+void
+sigstop_handler()
+{
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  while(1){
+    if (!(p->pending_signals & (1 << SIGCONT)))
+      yield();
+  }p->pending_signals = p->pending_signals & !(1 << SIGCONT);
+  release(&p->lock);
+}
+
+// 2.4 Handling Signals
+void
+handle_signals()
+{  
+  //TODO: check if we need to signal by priority
+  struct proc *p = myproc();
+  if (p->in_signal_handler)
+    return;
+  for(int i=0; i<NSIGS; i++){
+    uint curr_sig = 1 << i;
+    if((curr_sig & p->pending_signals) && !(curr_sig & p->sig_mask)){
+      if (p->sig_handlers[i] == (void*)SIG_IGN) {
+        p->pending_signals = p->pending_signals & !curr_sig;
+        continue;
+      }
+      if (p->sig_handlers[i] == (void*)SIG_DFL){
+        printf("handling signal %d\n", i);
+        switch(i){
+          case SIGKILL:
+            sigkill_handler();
+            break;
+          case SIGSTOP:
+            sigstop_handler();
+            break;
+          case SIGCONT:
+            sigcont_handler();
+            break;
+          default:
+            sigkill_handler();
+            break;
+        }
+      }
+      else { 
+        // backup current process mask
+        p->prev_sig_mask = p->sig_mask;
+        // replace process mask with signal mask
+        p->sig_mask = p->sig_handlers_masks[i];
+        // disable handling other signals
+        p->in_signal_handler = 1;
+        // backup user trapframe
+        memmove(p->user_trap_backup, p->trapframe, sizeof(struct trapframe));
+        // set pc to signal handler 
+        p->trapframe->epc = (uint64)p->sig_handlers[i];
+        // calculate sigret function size
+        uint sig_ret_size = sig_ret_end - sig_ret_start;
+        // allocate space for sigret function
+        p->trapframe->sp -= sig_ret_size;
+        // move sigret to stack
+        memmove((void*)p->trapframe->sp, &sig_ret_start, sizeof(sig_ret_size));
+        // pointer to sigret function in stack
+        void* sig_ret_addr = (void*)p->trapframe->sp;
+        // allocate space for signum 
+        p->trapframe->sp -= sizeof(int);
+        // move signum to stack
+        memmove((void*)p->trapframe->sp, &i, sizeof(int));
+        // allocate space for return address
+        p->trapframe->sp -= sizeof(int);
+        // move ret addr to stack
+        memmove((void*)p->trapframe->sp, &sig_ret_addr, sizeof(int));
+        // turn off signal bit
+        p->pending_signals = p->pending_signals & !curr_sig;
+      }
+    }
+  }
 }

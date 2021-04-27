@@ -139,3 +139,12 @@ userret:
         # return to user mode and user pc.
         # usertrapret() set up sstatus and sepc.
         sret
+
+# 2.4 Handling Signals
+.globl sig_ret_start
+.globl sig_ret_end
+
+sig_ret_start:
+        li a7, 24  # SYS_sigret number
+        ecall
+sig_ret_end:

@@ -96,6 +96,9 @@ usertrapret(void)
   // we're back in user space, where usertrap() is correct.
   intr_off();
 
+  //2.4 Handling Signals
+  handle_signals();
+
   // send syscalls, interrupts, and exceptions to trampoline.S
   w_stvec(TRAMPOLINE + (uservec - trampoline));
 
