@@ -24,6 +24,9 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 
+// 2.1.3 Updating the process signal mask
+int sigprocmask(uint);
+
 // ulib.c
 int stat(const char*, struct stat*);
 char* strcpy(char*, const char*);

@@ -312,8 +312,8 @@ fork(void)
 
   pid = np->pid;
 
-// 2.1.2 Updating process creation behavior
-np->sig_mask = p->sig_mask;
+  // 2.1.2 Updating process creation behavior
+  np->sig_mask = p->sig_mask;
 
 //deep copy parent signal handlers
   int sig;
@@ -670,4 +670,16 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+// 2.1.3 Updating the process signal mask
+uint
+sigprocmask(uint sigmask)
+{
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  uint old_sig_mask = p->sig_mask;
+  p->sig_mask = sigmask;
+  release(&p->lock);
+  return old_sig_mask;
 }

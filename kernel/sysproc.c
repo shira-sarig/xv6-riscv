@@ -95,3 +95,13 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+// 2.1.3 Updating the process signal mask
+uint64
+sys_sigprocmask(void)
+{
+  uint sigmask;
+
+  argaddr(0, (uint64*)&sigmask);
+  return sigprocmask(sigmask);
+}
