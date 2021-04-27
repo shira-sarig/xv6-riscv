@@ -1,5 +1,6 @@
 struct stat;
 struct rtcdate;
+struct sigaction;
 
 // system calls
 int fork(void);
@@ -26,6 +27,8 @@ int uptime(void);
 
 // 2.1.3 Updating the process signal mask
 int sigprocmask(uint);
+//2.1.4 Registering Signal Handlers
+int sigaction (int, const struct sigaction*, struct sigaction*);
 
 // ulib.c
 int stat(const char*, struct stat*);

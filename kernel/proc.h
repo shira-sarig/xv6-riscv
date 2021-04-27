@@ -113,3 +113,8 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 };
+
+struct sigaction {
+  void (*sa_handler) (int);
+  uint sigmask;
+};

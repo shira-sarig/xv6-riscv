@@ -683,3 +683,36 @@ sigprocmask(uint sigmask)
   release(&p->lock);
   return old_sig_mask;
 }
+
+//2.1.4 Registering Signal Handlers
+int 
+sigaction(int signum, uint64 act, uint64 oldact)
+{
+  struct proc *p = myproc();
+
+  // check if signum is legal, act is not null and we're not trying to modify sigkill or sigstop
+  if(signum < 0 || signum > NSIGS || signum == SIGKILL || signum == SIGSTOP)
+    return -1;
+  
+  acquire(&p->lock);
+
+  if (oldact) {
+    copyout(p->pagetable, oldact, (char*)&p->sig_handlers[signum], sizeof(p->sig_handlers[signum]));
+    copyout(p->pagetable, oldact + sizeof(p->sig_handlers[signum]), (char*)&p->sig_handlers_masks[signum], sizeof(uint));
+  }
+
+  struct sigaction temp;
+  if(act && copyin(p->pagetable, (char*)&temp, act, sizeof(struct sigaction)) >= 0) {
+    // check that the new mask is not blocking sigkill or sigstop
+    if((((1 << SIGKILL) & temp.sigmask) != 0) || (((1 << SIGSTOP) & temp.sigmask) != 0)) {
+      release(&p->lock);
+      return -1;
+    }
+
+    p->sig_handlers[signum] = temp.sa_handler;
+    p->sig_handlers_masks[signum] = temp.sigmask;
+  }
+
+  release(&p->lock);
+  return 0;
+}

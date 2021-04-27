@@ -105,3 +105,19 @@ sys_sigprocmask(void)
   argaddr(0, (uint64*)&sigmask);
   return sigprocmask(sigmask);
 }
+
+//2.1.4 Registering Signal Handlers
+uint64
+sys_sigaction(void)
+{
+  int signum;
+  uint64 act;
+  uint64 old;
+
+  if(argint(0, &signum) < 0)
+    return -1;
+  argaddr(1, &act);
+  argaddr(2, &old);
+
+  return sigaction(signum, act, old);
+}
