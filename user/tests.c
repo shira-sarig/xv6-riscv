@@ -18,7 +18,18 @@ void sig_handler_1() {
 }
 
 void sig_handler_2() {
-    printf("HELLO IM HANDLER 2\n");
+    printf("HELLO IM HANDLER #2\n");
+}
+
+void sig_handler_3() {
+    printf("HELLO I AM CHILD\n");
+}
+
+int counter = 0;
+
+void sig_handler_4(int signum) {
+    counter++;
+    printf("counter is: %d by %d with signum %d\n", counter, getpid(), signum);
 }
 
 int
@@ -194,6 +205,8 @@ int test4_check_sigaction_handler_update() {
 
 
 int test5_check_sending_signals() {
+    int test_status = 0;
+    int status;
     int pid = fork();
     if (pid == 0) {
         while(1) {
@@ -202,10 +215,112 @@ int test5_check_sending_signals() {
     }
     else {
         kill(pid, SIGKILL);
+        wait(&status);
+    }
+    return test_status & status;
+}
+
+int test6_check_cont_stop() {
+    int test_status = 0;
+    struct sigaction* sig_action_1 = malloc(sizeof(struct sigaction*));
+    sig_action_1->sa_handler = &sig_handler_3;
+    sig_action_1->sigmask = 0;
+    if(sigaction(4, sig_action_1, 0) == -1){
+        printf("sigaction failed\n");
+    }
+    
+    int pid = fork();
+
+    if(pid == 0){
+        while(1){}
+    }
+
+    sleep(5);
+    kill(pid, SIGSTOP);
+    sleep(10);
+    kill(pid, 4);
+    sleep(10);
+    kill(pid, SIGCONT);
+    sleep(30);
+    kill(pid, SIGKILL);
+    int status;
+    wait(&status);
+
+    return test_status & status;
+}
+
+int test7_spawning_multiple_procs(){
+    int test_status = 0;
+    struct sigaction* sig_action_1 = malloc(sizeof(struct sigaction*));
+    sig_action_1->sa_handler = &sig_handler_4;
+    sig_action_1->sigmask = 0;
+
+    if(sigaction(2, sig_action_1, 0) == -1)
+            printf("sigaction failed\n");
+    if(sigaction(3, sig_action_1, 0) == -1)
+            printf("sigaction failed\n");
+    if(sigaction(4, sig_action_1, 0) == -1)
+            printf("sigaction failed\n");
+    if(sigaction(5, sig_action_1, 0) == -1)
+            printf("sigaction failed\n");
+    int curr_pid = getpid();
+    for(int i=2; i<6; i++){
+        int pid = fork();
+        if (pid < 0) {
+            printf("fork failed! i is: %d\n", i);
+            sleep(10);
+            exit(1);
+        }
+        if(pid == 0){
+            kill(curr_pid, i);
+            exit(0);
+        }
+        else {
+            //sleep(10);
+        }
+    }
+    while(1){
+        if(counter == 4){
+            break;
+        }
+    }
+    for(int i=2; i<6; i++){
         int status;
         wait(&status);
     }
-    return 0;
+    
+    sig_action_1->sa_handler = (void*)SIG_DFL;
+    sig_action_1->sigmask = 0;
+    for(int i=0; i<NSIGS; i++){
+        sigaction(i, sig_action_1, 0);
+    }
+    printf("ending\n");
+    return test_status;
+}
+
+int test8_check_blocking_signals(){
+    int test_status = 0;
+    struct sigaction* sig_action_1 = malloc(sizeof(struct sigaction*));
+    sig_action_1->sa_handler = &sig_handler_2;
+    sig_action_1->sigmask = 0;
+
+    if(sigaction(2, sig_action_1, 0) == -1)
+        printf("sigaction failed\n");
+
+    int pid = fork();
+    if(pid == 0){
+        sigprocmask(4);
+        while(1){}
+    } else {
+        sleep(10);
+        kill(pid, 2); //not supposed to print
+        sleep(20);
+        kill(pid, SIGKILL);
+    }
+
+    int status;
+    wait(&status);
+    return test_status;
 }
 
 int
@@ -220,6 +335,9 @@ main(int argc, char *argv[]){
         {test3_check_sigprocmask, "test3_check_sigprocmask"},
         {test4_check_sigaction_handler_update, "test4_check_sigaction_handler_update"},
         {test5_check_sending_signals, "test5_check_sending_signals"},
+        {test6_check_cont_stop, "test6_check_cont_stop"},
+        // {test7_spawning_multiple_procs, "test7_spawning_multiple_procs"},
+        {test8_check_blocking_signals, "test8_check_blocking_signals"},
         {0,0}
     };
 

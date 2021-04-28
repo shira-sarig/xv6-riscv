@@ -131,6 +131,13 @@ found:
     return 0;
   }
 
+  // Allocate a trapframe backup page.
+  if((p->user_trap_backup = (struct trapframe *)kalloc()) == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -163,7 +170,10 @@ freeproc(struct proc *p)
 {
   if(p->trapframe)
     kfree((void*)p->trapframe);
+  if(p->user_trap_backup)
+    kfree((void*)p->user_trap_backup);
   p->trapframe = 0;
+  p->user_trap_backup = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -175,6 +185,18 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->pending_signals = 0;
+  p->sig_mask = 0;
+
+  int sig;
+  for(sig = 0; sig < NSIGS; sig++) {
+    p->sig_handlers[sig] = (void*)SIG_DFL;
+    p->sig_handlers_masks[sig] = 0;
+  }
+
+  p->in_signal_handler = 0;
+  p->prev_sig_mask = 0;
+
 }
 
 // Create a user page table for a given process,
@@ -318,6 +340,7 @@ fork(void)
 
   // 2.1.2 Updating process creation behavior
   np->sig_mask = p->sig_mask;
+  np->pending_signals = 0;
 
 //deep copy parent signal handlers
   int sig;
@@ -741,41 +764,47 @@ sigret(void)
 void
 sigkill_handler()
 {
-  printf("in kill handler\n");
   struct proc *p = myproc();
-  acquire(&p->lock);
+  // acquire(&p->lock);
   p->killed = 1;
   if(p->state == SLEEPING){
     // Wake process from sleep().
     p->state = RUNNABLE;
-  }
-  p->pending_signals = p->pending_signals & !(1 << SIGKILL);
-  release(&p->lock);
+  }  
+  // release(&p->lock);
 }
 
 void
 sigcont_handler()
 {
   struct proc *p = myproc();
-  acquire(&p->lock);
+  // acquire(&p->lock);
 
  // If no SIGSTOP in pending signals turn off cont signal bit
   if (((1 << SIGSTOP) & p->pending_signals) == 0)
-    p->pending_signals = p->pending_signals & !(1 << SIGCONT);
+    p->pending_signals = p->pending_signals & ~(1 << SIGCONT);
   
-  release(&p->lock);
+  // release(&p->lock);
 }
 
 void
 sigstop_handler()
 {
   struct proc *p = myproc();
-  acquire(&p->lock);
+  
   while(1){
-    if (!(p->pending_signals & (1 << SIGCONT)))
+    if (!holding(&p->lock))
+      acquire(&p->lock);
+    if (!(p->pending_signals & (1 << SIGCONT))){
+      release(&p->lock);
       yield();
-  }p->pending_signals = p->pending_signals & !(1 << SIGCONT);
-  release(&p->lock);
+    } else {
+      break;
+    }
+  }
+  p->pending_signals = p->pending_signals & ~(1 << SIGSTOP);
+  p->pending_signals = p->pending_signals & ~(1 << SIGCONT);
+  // release(&p->lock);
 }
 
 // 2.4 Handling Signals
@@ -784,20 +813,23 @@ handle_signals()
 {  
   //TODO: check if we need to signal by priority
   struct proc *p = myproc();
-  if (p->in_signal_handler)
+  acquire(&p->lock);
+  if (p->in_signal_handler){
+    release(&p->lock);
     return;
+  }
   for(int i=0; i<NSIGS; i++){
     uint curr_sig = 1 << i;
     if((curr_sig & p->pending_signals) && !(curr_sig & p->sig_mask)){
       if (p->sig_handlers[i] == (void*)SIG_IGN) {
-        p->pending_signals = p->pending_signals & !curr_sig;
+        p->pending_signals = p->pending_signals & ~curr_sig;
         continue;
       }
       if (p->sig_handlers[i] == (void*)SIG_DFL){
-        printf("handling signal %d\n", i);
         switch(i){
           case SIGKILL:
             sigkill_handler();
+            p->pending_signals = p->pending_signals & ~curr_sig;
             break;
           case SIGSTOP:
             sigstop_handler();
@@ -807,6 +839,7 @@ handle_signals()
             break;
           default:
             sigkill_handler();
+            p->pending_signals = p->pending_signals & ~curr_sig;
             break;
         }
       }
@@ -819,27 +852,24 @@ handle_signals()
         p->in_signal_handler = 1;
         // backup user trapframe
         memmove(p->user_trap_backup, p->trapframe, sizeof(struct trapframe));
-        // set pc to signal handler 
-        p->trapframe->epc = (uint64)p->sig_handlers[i];
         // calculate sigret function size
         uint sig_ret_size = sig_ret_end - sig_ret_start;
         // allocate space for sigret function
         p->trapframe->sp -= sig_ret_size;
         // move sigret to stack
-        memmove((void*)p->trapframe->sp, &sig_ret_start, sizeof(sig_ret_size));
-        // pointer to sigret function in stack
-        void* sig_ret_addr = (void*)p->trapframe->sp;
-        // allocate space for signum 
-        p->trapframe->sp -= sizeof(int);
-        // move signum to stack
-        memmove((void*)p->trapframe->sp, &i, sizeof(int));
-        // allocate space for return address
-        p->trapframe->sp -= sizeof(int);
-        // move ret addr to stack
-        memmove((void*)p->trapframe->sp, &sig_ret_addr, sizeof(int));
+        copyout(p->pagetable, (uint64)p->trapframe->sp, (char*)&sig_ret_start, sig_ret_size);
+        // move signum to a0
+        p->trapframe->a0 = i;
+        // move sigret to ra
+        p->trapframe->ra = p->trapframe->sp;
         // turn off signal bit
-        p->pending_signals = p->pending_signals & !curr_sig;
+        printf("pending signal before in user %d\n", p->pending_signals);
+        p->pending_signals = p->pending_signals & ~curr_sig;
+        printf("pending signal after in user %d\n", p->pending_signals);
+        // set pc to signal handler 
+        p->trapframe->epc = (uint64)p->sig_handlers[i];
       }
     }
   }
+  release(&p->lock);
 }
