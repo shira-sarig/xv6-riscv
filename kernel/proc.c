@@ -704,6 +704,8 @@ procdump(void)
 uint
 sigprocmask(uint sigmask)
 {
+  if (sigmask == SIGKILL || sigmask == SIGSTOP)
+    return -1;
   struct proc *p = myproc();
   acquire(&p->lock);
   uint old_sig_mask = p->sig_mask;

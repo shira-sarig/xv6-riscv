@@ -124,6 +124,8 @@ exec(char *path, char **argv)
     p->sig_handlers_masks[sig] = 0;
   }
 
+  p->pending_signals = 0;
+
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:
