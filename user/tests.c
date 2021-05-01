@@ -13,6 +13,10 @@ struct sigaction {
   uint sigmask;
 };
 
+void sig_handler_start(){
+    return;
+}
+
 void sig_handler_1() {
     printf("HELLO IM HANDLER #1\n");
 }
@@ -26,6 +30,7 @@ void sig_handler_3() {
 }
 
 int counter = 0;
+
 
 void sig_handler_4(int signum) {
     counter++;
@@ -276,7 +281,7 @@ int test7_spawning_multiple_procs(){
             exit(0);
         }
         else {
-            //sleep(10);
+            sleep(10);
         }
     }
     while(1){
@@ -295,6 +300,37 @@ int test7_spawning_multiple_procs(){
         sigaction(i, sig_action_1, 0);
     }
     printf("ending\n");
+    return test_status;
+}
+
+int test7_check_multiple_procs(){ //should print 'hello handler 1' 'hello handler 2' one after the other x 8
+    printf("\ninitializing for compiler %p\n", &sig_handler_start);
+    int test_status = 0;
+    struct sigaction* sig_action_1 = malloc(sizeof(struct sigaction*));
+    sig_action_1->sa_handler = &sig_handler_1;
+    sig_action_1->sigmask = 0;
+    struct sigaction* sig_action_2 = malloc(sizeof(struct sigaction*));
+    sig_action_2->sa_handler = &sig_handler_2;
+    sig_action_2->sigmask = 0;
+
+    if(sigaction(4, sig_action_1, 0) == -1)
+        printf("sigaction failed\n");
+    if(sigaction(3, sig_action_2, 0) == -1)
+        printf("sigaction failed\n");
+
+    for(int i=0; i<16; i++){
+        int pid = fork();
+        if(pid == 0){
+            if(i%2 == 0){
+                kill(getpid(), 4);
+            } else if(i%2 == 1) {
+                kill(getpid(), 3);
+            }
+            exit(0);
+        } else {
+            wait(0);
+        }
+    }
     return test_status;
 }
 
@@ -336,7 +372,8 @@ main(int argc, char *argv[]){
         {test4_check_sigaction_handler_update, "test4_check_sigaction_handler_update"},
         {test5_check_sending_signals, "test5_check_sending_signals"},
         {test6_check_cont_stop, "test6_check_cont_stop"},
-        // {test7_spawning_multiple_procs, "test7_spawning_multiple_procs"},
+       // {test7_spawning_multiple_procs, "test7_spawning_multiple_procs"},
+        {test7_check_multiple_procs, "test7_check_multiple_procs"},
         {test8_check_blocking_signals, "test8_check_blocking_signals"},
         {0,0}
     };

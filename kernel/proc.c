@@ -633,6 +633,7 @@ kill(int pid, int signum)
         return -1;
       }
       p->pending_signals = (p->pending_signals | (1 << signum));
+
       release(&p->lock);
       return 0;
     }
@@ -865,9 +866,7 @@ handle_signals()
         // move sigret to ra
         p->trapframe->ra = p->trapframe->sp;
         // turn off signal bit
-        printf("pending signal before in user %d\n", p->pending_signals);
         p->pending_signals = p->pending_signals & ~curr_sig;
-        printf("pending signal after in user %d\n", p->pending_signals);
         // set pc to signal handler 
         p->trapframe->epc = (uint64)p->sig_handlers[i];
       }
