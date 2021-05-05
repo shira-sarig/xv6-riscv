@@ -24,6 +24,7 @@ struct cpu {
   struct context context;     // swtch() here to enter scheduler().
   int noff;                   // Depth of push_off() nesting.
   int intena;                 // Were interrupts enabled before push_off()?
+  struct thread *thread;        // The thread running on this cpu, or null.
 };
 
 extern struct cpu cpus[NCPU];
@@ -80,7 +81,29 @@ struct trapframe {
   /* 280 */ uint64 t6;
 };
 
-enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+enum procstate { UNUSED, USED, /*SLEEPING, RUNNABLE, RUNNING,*/ ZOMBIE };
+
+// 3.1 Moving to threads
+enum threadstate { T_UNUSED, T_USED, T_SLEEPING, T_RUNNABLE, T_RUNNING, T_ZOMBIE };
+#define NTHREAD 8
+
+struct thread
+{
+  enum threadstate state;        // Thread state
+  void *chan;                    // If non-zero, sleeping on chan
+  int killed;                    // If non-zero, have been killed
+  int xstate;                    // Exit status to be returned to parent's wait //TODO: check this
+  int tid;                       // Thread ID
+  int tf_index;                  // Thread trapframe index
+
+  struct trapframe *user_trap_backup;   // Backup of user trapframe
+  uint64 kstack;                        // Virtual address of kernel stack
+  struct trapframe *trapframe; // data page for trampoline.S
+  struct spinlock lock;
+  struct proc *parent;         // Parent process of thread
+  struct context context;      // swtch() here to run process
+};
+
 
 // Per-process state
 struct proc {
@@ -88,7 +111,7 @@ struct proc {
 
   // p->lock must be held when using these:
   enum procstate state;        // Process state
-  void *chan;                  // If non-zero, sleeping on chan
+  // void *chan;                  // If non-zero, sleeping on chan
   int killed;                  // If non-zero, have been killed
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
@@ -97,7 +120,7 @@ struct proc {
   uint pending_signals;                 // Pending signals
   uint sig_mask;                        // Signal masks
   void* sig_handlers[NSIGS];            // Signal handlers
-  struct trapframe *user_trap_backup;   // Backup of user trapframe
+  // struct trapframe *user_trap_backup;   // Backup of user trapframe
   uint sig_handlers_masks[NSIGS];       // Masks for each signal handler
 
   // 2.1.5 fields for the sigret system call
@@ -105,17 +128,18 @@ struct proc {
   uint prev_sig_mask;                   // Holds process sigmask while process is running a signal handler
 
   // proc_tree_lock must be held when using this:
-  struct proc *parent;         // Parent process
+  struct proc *parent;         // Parent process //TODO: maybe dont need
 
   // these are private to the process, so p->lock need not be held.
-  uint64 kstack;               // Virtual address of kernel stack
+  // uint64 kstack;               // Virtual address of kernel stack
   uint64 sz;                   // Size of process memory (bytes)
   pagetable_t pagetable;       // User page table
-  struct trapframe *trapframe; // data page for trampoline.S
-  struct context context;      // swtch() here to run process
+  struct trapframe *t_trapframes; // data page for trampoline.S
+  // struct context context;      // swtch() here to run process
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  struct thread p_threads[NTHREAD];   // Threads running in this process
 };
 
 struct sigaction {

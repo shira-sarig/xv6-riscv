@@ -20,7 +20,20 @@ exec(char *path, char **argv)
   struct proghdr ph;
   pagetable_t pagetable = 0, oldpagetable;
   struct proc *p = myproc();
+  struct thread *curr_t = mythread();
 
+// 3 Threads
+  for(struct thread *t = p->p_threads; t < &p->p_threads[NTHREAD]; t++) {
+    if (t->tid != curr_t->tid) {
+      acquire(&t->lock);
+      t->killed = 1;
+      if (t->state == T_SLEEPING) {
+        t->state = T_RUNNABLE;
+      }
+      release(&t->lock);
+    }
+  }
+ 
   begin_op();
 
   if((ip = namei(path)) == 0){
@@ -100,7 +113,7 @@ exec(char *path, char **argv)
   // arguments to user main(argc, argv)
   // argc is returned via the system call return
   // value, which goes in a0.
-  p->trapframe->a1 = sp;
+  curr_t->trapframe->a1 = sp;
 
   // Save program name for debugging.
   for(last=s=path; *s; s++)
@@ -112,8 +125,8 @@ exec(char *path, char **argv)
   oldpagetable = p->pagetable;
   p->pagetable = pagetable;
   p->sz = sz;
-  p->trapframe->epc = elf.entry;  // initial program counter = main
-  p->trapframe->sp = sp; // initial stack pointer
+  curr_t->trapframe->epc = elf.entry;  // initial program counter = main
+  curr_t->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
 
 // // 2.1.2 Updating process creation behavior

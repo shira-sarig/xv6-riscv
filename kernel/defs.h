@@ -8,6 +8,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct thread;
 
 // bio.c
 void            binit(void);
@@ -93,6 +94,7 @@ int             kill(int, int);
 struct cpu*     mycpu(void);
 struct cpu*     getmycpu(void);
 struct proc*    myproc();
+struct thread*  mythread();
 void            procinit(void);
 void            scheduler(void) __attribute__((noreturn));
 void            sched(void);
@@ -108,6 +110,10 @@ void            procdump(void);
 uint            sigprocmask(uint);
 int             sigaction(int, uint64 act, uint64 oldact);
 void            sigret(void);
+int             kthread_create(uint64, uint64);
+int             kthread_id();
+void            kthread_exit(int);
+int             kthread_join(int, int*);
 
 // swtch.S
 void            swtch(struct context*, struct context*);

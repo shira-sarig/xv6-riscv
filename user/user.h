@@ -32,6 +32,11 @@ int sigaction (int, const struct sigaction*, struct sigaction*);
 // 2.1.5 The sigret system call
 void sigret(void);
 
+int kthread_create (void (*)(), void *);
+int kthread_id(void);
+void kthread_exit(int satus);
+int kthread_join(int, int*);
+
 // ulib.c
 int stat(const char*, struct stat*);
 char* strcpy(char*, const char*);
