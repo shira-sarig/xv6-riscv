@@ -254,54 +254,6 @@ int test6_check_cont_stop() {
     return test_status & status;
 }
 
-int test7_spawning_multiple_procs(){
-    int test_status = 0;
-    struct sigaction* sig_action_1 = malloc(sizeof(struct sigaction*));
-    sig_action_1->sa_handler = &sig_handler_4;
-    sig_action_1->sigmask = 0;
-
-    if(sigaction(2, sig_action_1, 0) == -1)
-            printf("sigaction failed\n");
-    if(sigaction(3, sig_action_1, 0) == -1)
-            printf("sigaction failed\n");
-    if(sigaction(4, sig_action_1, 0) == -1)
-            printf("sigaction failed\n");
-    if(sigaction(5, sig_action_1, 0) == -1)
-            printf("sigaction failed\n");
-    int curr_pid = getpid();
-    for(int i=2; i<6; i++){
-        int pid = fork();
-        if (pid < 0) {
-            printf("fork failed! i is: %d\n", i);
-            sleep(10);
-            exit(1);
-        }
-        if(pid == 0){
-            kill(curr_pid, i);
-            exit(0);
-        }
-        else {
-            sleep(10);
-        }
-    }
-    while(1){
-        if(counter == 4){
-            break;
-        }
-    }
-    for(int i=2; i<6; i++){
-        int status;
-        wait(&status);
-    }
-    
-    sig_action_1->sa_handler = (void*)SIG_DFL;
-    sig_action_1->sigmask = 0;
-    for(int i=0; i<NSIGS; i++){
-        sigaction(i, sig_action_1, 0);
-    }
-    printf("ending\n");
-    return test_status;
-}
 
 int test7_check_multiple_procs(){ //should print 'hello handler 1' 'hello handler 2' one after the other x 8
     printf("\ninitializing for compiler %p\n", &sig_handler_start);
@@ -372,7 +324,6 @@ main(int argc, char *argv[]){
         {test4_check_sigaction_handler_update, "test4_check_sigaction_handler_update"},
         {test5_check_sending_signals, "test5_check_sending_signals"},
         {test6_check_cont_stop, "test6_check_cont_stop"},
-       // {test7_spawning_multiple_procs, "test7_spawning_multiple_procs"},
         {test7_check_multiple_procs, "test7_check_multiple_procs"},
         {test8_check_blocking_signals, "test8_check_blocking_signals"},
         {0,0}
