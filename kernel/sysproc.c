@@ -131,6 +131,8 @@ sys_sigret(void)
   return 0;
 }
 
+
+// 3.2 Thread system calls
 uint64
 sys_kthread_create(void)
 {
@@ -146,9 +148,7 @@ sys_kthread_create(void)
 uint64
 sys_kthread_id(void)
 {
-  struct thread *t = mythread();
-
-  return t->tid;
+  return kthread_id();
 }
 
 uint64

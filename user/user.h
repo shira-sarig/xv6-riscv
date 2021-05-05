@@ -34,7 +34,7 @@ void sigret(void);
 
 int kthread_create (void (*)(), void *);
 int kthread_id(void);
-void kthread_exit(int satus);
+void kthread_exit(int);
 int kthread_join(int, int*);
 
 // ulib.c

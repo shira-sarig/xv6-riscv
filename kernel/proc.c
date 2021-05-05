@@ -177,11 +177,9 @@ allocthread(struct proc* p)
   t->trapframe = &p->t_trapframes[i];
   t->parent = p;
 
-
   // Allocate a trapframe backup page.
   if((t->user_trap_backup = (struct trapframe *)kalloc()) == 0){
     freethread(t);  
-    p->state = ZOMBIE;
     release(&t->lock);
     return 0;
   }
@@ -497,6 +495,8 @@ exit(int status)
 {
   struct proc *p = myproc();
 
+  printf("inside of main exit\n");
+
   if(p == initproc)
     panic("init exiting");
 
@@ -527,12 +527,16 @@ exit(int status)
   p->xstate = status;
   p->state = ZOMBIE;
 
+  printf("before releasing threads\n");
+
   for(struct thread *t = p->p_threads; t < &p->p_threads[NTHREAD]; t++) {
     acquire(&t->lock);
     t->state = T_ZOMBIE;
     if(t != mythread())
       release(&t->lock);
   }
+
+  printf("after releasing threads\n");
 
   release(&p->lock);
   release(&wait_lock);
@@ -1027,88 +1031,113 @@ handle_signals()
 
 int
 kthread_create(uint64 start_func, uint64 stack)
-{ 
-    struct thread* t = mythread();
-    struct thread* nt;
+{
+  int tid;
+  struct proc *p = myproc();
+  struct thread* t = mythread();
+  struct thread* nt;
 
-    if((nt = allocthread(myproc())) == 0) {
-        return -1;
-    }
-    *nt->trapframe = *t->trapframe;
-    nt->trapframe->epc = (uint64)start_func;
-    nt->trapframe->sp = (uint64)(stack + MAX_STACK_SIZE);
-    nt->state = T_RUNNABLE;
+  if((nt = allocthread(p)) == 0) {
+      return -1;
+  }
 
-    release(&nt->lock);
-    return nt->tid;
+  tid = nt->tid;
+
+  nt->state = T_RUNNABLE;
+
+  *(nt->trapframe) = *(t->trapframe);
+
+  nt->trapframe->epc = (uint64)start_func;
+
+  nt->trapframe->sp = (uint64)(stack + MAX_STACK_SIZE - 16);
+
+  release(&nt->lock);
+  return tid;
 }
 
-void
-exit_single_thread(int status) {
+int
+kthread_id() {
+
   struct thread *t = mythread();
-  struct proc *p = myproc();
 
-  acquire(&t->lock);
-  t->xstate = status;
-  t->state = T_ZOMBIE;
-
-  release(&p->lock);
-  wakeup(t);
-  // Jump into the scheduler, never to return.
-  sched();
-  panic("zombie exit");
+  if(t){
+    return t->tid;
+  }
+  return -1;
+  
 }
 
 void
 kthread_exit(int status)
 {
   struct proc *p = myproc();
+  struct thread *curr_t = mythread();
 
   acquire(&p->lock);
-  int used_threads = 0;
+  int num_threads_running = 0;
   for (struct thread *t = p->p_threads; t < &p->p_threads[NTHREAD]; t++) {
+    acquire(&t->lock);
     if (t->state != T_UNUSED) {
-      used_threads++;
+      num_threads_running++;
     }
+    release(&t->lock);
   }
 
-  if (used_threads <= 1) {
+  printf("num threads %d\n", num_threads_running);
+  //i am last thread running
+  if (num_threads_running == 1) {
     release(&p->lock);
+    printf("releeasing last thread in kthread_exit\n");
     exit(status);
   }
 
-  exit_single_thread(status);
+  acquire(&curr_t->lock);
+  curr_t->xstate = status;
+  curr_t->state = T_ZOMBIE;
+
+  release(&p->lock);
+  
+  //wake up threads waiting for this thread to exit
+  wakeup(curr_t);
+  
+  // Jump into the scheduler, never to return.
+  sched();
+  panic("zombie exit");
 }
 
 int
 kthread_join(int thread_id, int *status)
 {
-  struct thread *jt  = 0;
-  struct proc *p = myproc();  
+  struct thread *t_tojoin  = 0;
+  struct proc *p = myproc();
 
-  for (struct thread *temp_t = p->p_threads; temp_t < &p->p_threads[NTHREAD]; temp_t++) {
-    acquire(&temp_t->lock);
-    if (thread_id == temp_t->tid) {
-      jt = temp_t;
+  // find the target thread
+  for (struct thread *t = p->p_threads; t < &p->p_threads[NTHREAD]; t++) {
+    acquire(&t->lock);
+    if (thread_id == t->tid) {
+      t_tojoin = t;
       goto found;
     }
-    release(&temp_t->lock);
-  }  
-  return -1;
-
-   found:
-  while (jt->state != T_ZOMBIE && jt->state != T_UNUSED && jt->tid == thread_id) {
-    sleep(jt, &jt->lock);
+    release(&t->lock);
   }
 
-  if (jt->state == T_ZOMBIE && jt->tid == thread_id) {
-    if (status != 0 && copyout(p->pagetable, (uint64)status, (char *)&jt->xstate, sizeof(jt->xstate)) < 0) {
-      release(&jt->lock);
-      return -1;
-    }
-    freethread(jt);
-  } 
+  return -1;
 
-  release(&jt->lock);
-  return 0;
+  found:
+    //calling thread waits on target thread to finish running
+    while (t_tojoin->state != T_ZOMBIE && t_tojoin->state != T_UNUSED) {
+      sleep(t_tojoin, &t_tojoin->lock);
+    }
+
+    //once target thread is done running, get its status
+    if (t_tojoin->state == T_ZOMBIE) {
+      if (status != 0 && copyout(p->pagetable, (uint64)status, (char *)&t_tojoin->xstate, sizeof(t_tojoin->xstate)) < 0) {
+        release(&t_tojoin->lock);
+        return -1;
+      }
+      freethread(t_tojoin);
+    } 
+
+    release(&t_tojoin->lock);
+    return 0;
 }
