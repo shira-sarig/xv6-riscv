@@ -263,7 +263,6 @@ found:
     return 0;
   }
 
-  // release(&t->lock);
   return p;
 }
 
@@ -397,6 +396,7 @@ growproc(int n)
   sz = p->sz;
   if(n > 0){
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
+      release(&p->lock);
       return -1;
     }
   } else if(n < 0){
@@ -422,7 +422,6 @@ fork(void)
   if((np = allocproc()) == 0){
     return -1;
   }
-  nt = &np->p_threads[0];
 
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
@@ -432,7 +431,7 @@ fork(void)
   }
   np->sz = p->sz;
 
-  np->t_trapframes = p->t_trapframes;
+  nt = &np->p_threads[0];
 
   // copy saved user registers.
   *(nt->trapframe) = *(t->trapframe);
@@ -531,9 +530,11 @@ exit(int status)
   for(struct thread *t = p->p_threads; t < &p->p_threads[NTHREAD]; t++) {
     acquire(&t->lock);
     t->state = T_ZOMBIE;
-    release(&t->lock);
+    if(t != mythread())
+      release(&t->lock);
   }
 
+  release(&p->lock);
   release(&wait_lock);
 
   // Jump into the scheduler, never to return.
@@ -653,8 +654,6 @@ sched(void)
 {
   int intena;
   struct thread *t = mythread();
-  struct proc *p = myproc();
-  printf("sched tid: %d pid: %d\n", t->tid, p->pid);
 
   if(!holding(&t->lock))
     panic("sched t->lock");
@@ -1026,6 +1025,7 @@ handle_signals()
   release(&p->lock);
 }
 
+int
 kthread_create(uint64 start_func, uint64 stack)
 { 
     struct thread* t = mythread();

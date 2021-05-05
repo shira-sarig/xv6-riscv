@@ -54,8 +54,11 @@ usertrap(void)
   if(r_scause() == 8){
     // system call
 
-    if(t->killed)
+    if(p->killed)
       exit(-1);
+
+    if(t->killed)
+      kthread_exit(-1);
 
     // sepc points to the ecall instruction,
     // but we want to return to the next instruction.
@@ -66,18 +69,21 @@ usertrap(void)
     intr_on();
 
     syscall();
-    printf("after syscall\n");
+
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
-    printf("pid of thread is: %d\n", p->pid);
-    printf("usertrap(): unexpected scause %p tid=%d\n", r_scause(), t->tid);
+
+    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
-    t->killed = 1;
+    p->killed = 1;
   }
 
-  if(t->killed)
+  if(p->killed)
     exit(-1);
+  
+  if(t->killed)
+    kthread_exit(-1);
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)

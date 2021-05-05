@@ -24,12 +24,15 @@ exec(char *path, char **argv)
 
 // 3 Threads
   for(struct thread *t = p->p_threads; t < &p->p_threads[NTHREAD]; t++) {
-    if (t->tid != curr_t->tid) {
-      acquire(&t->lock);
+    acquire(&t->lock);
+    if (t->tid != curr_t->tid && t->state != T_UNUSED) {
       t->killed = 1;
       if (t->state == T_SLEEPING) {
         t->state = T_RUNNABLE;
       }
+      release(&t->lock);
+      kthread_join(t->tid, 0);
+    } else {
       release(&t->lock);
     }
   }
