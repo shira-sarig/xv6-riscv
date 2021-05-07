@@ -137,19 +137,20 @@ alloctid() {
 static void
 freethread(struct thread* t)
 {
+  if(t->user_trap_backup)
+    kfree((void*)t->user_trap_backup);
+  t->user_trap_backup = 0;
   if(t->kstack)
     kfree((void*)t->kstack);
   t->kstack = 0;
-  if(t->user_trap_backup)
-    kfree((void*)t->user_trap_backup);
   t->trapframe = 0;
-  t->user_trap_backup = 0;
   t->chan = 0;
   t->state = T_UNUSED;
   t->xstate = 0;
   t->tid = 0;
   t->killed = 0;
   t->parent = 0;
+  t->tf_index = 0;
 }
 
 // 3 Threads
@@ -176,6 +177,7 @@ allocthread(struct proc* p)
   t->tf_index = i;
   t->trapframe = &p->t_trapframes[i];
   t->parent = p;
+  t->killed = 0;
 
   // Allocate a trapframe backup page.
   if((t->user_trap_backup = (struct trapframe *)kalloc()) == 0){
@@ -256,10 +258,13 @@ found:
   struct thread *t;
   // Allocate thread.
   if((t = allocthread(p)) == 0){
+    release(&t->lock);
     freeproc(p);
     release(&p->lock);
     return 0;
   }
+
+  release(&t->lock);
 
   return p;
 }
@@ -379,7 +384,6 @@ userinit(void)
 
   p->p_threads[0].state = T_RUNNABLE;
 
-  release(&(p->p_threads[0].lock));
   release(&p->lock);
 }
 
@@ -458,7 +462,6 @@ fork(void)
     np->sig_handlers_masks[sig] = p->sig_handlers_masks[sig];
   }
 
-  release(&nt->lock);
   release(&np->lock);
 
   acquire(&wait_lock);
@@ -494,8 +497,7 @@ void
 exit(int status)
 {
   struct proc *p = myproc();
-
-  printf("inside of main exit\n");
+  struct thread *curr_t = mythread();
 
   if(p == initproc)
     panic("init exiting");
@@ -527,20 +529,38 @@ exit(int status)
   p->xstate = status;
   p->state = ZOMBIE;
 
-  printf("before releasing threads\n");
+  // for(struct thread *t = p->p_threads; t < &p->p_threads[NTHREAD]; t++) {
+  //   acquire(&t->lock);
+  //   t->state = T_ZOMBIE;
+  //   if(t != mythread())
+  //     release(&t->lock);
+  // }
 
+  // release(&p->lock);
+  // release(&wait_lock);
+
+  // // Jump into the scheduler, never to return.
+  // sched();
+  // panic("zombie exit");
+
+// 3 Threads
   for(struct thread *t = p->p_threads; t < &p->p_threads[NTHREAD]; t++) {
-    acquire(&t->lock);
-    t->state = T_ZOMBIE;
-    if(t != mythread())
-      release(&t->lock);
+      if (t->tid != curr_t->tid && t->state != T_UNUSED) {
+          acquire(&t->lock);
+          t->killed = 1;
+          if (t->state == T_SLEEPING) {
+              t->state = T_RUNNABLE;
+          }
+          release(&t->lock);
+          kthread_join(t->tid, 0);
+      }
   }
-
-  printf("after releasing threads\n");
-
   release(&p->lock);
-  release(&wait_lock);
 
+  acquire(&curr_t->lock);
+  curr_t->state = T_ZOMBIE;
+
+  release(&wait_lock);
   // Jump into the scheduler, never to return.
   sched();
   panic("zombie exit");
@@ -658,12 +678,10 @@ sched(void)
 {
   int intena;
   struct thread *t = mythread();
-
+  
   if(!holding(&t->lock))
     panic("sched t->lock");
   if(mycpu()->noff != 1) {
-    if (holding(&myproc()->lock))
-      printf("holding proc lock\n"); //REMOVE
     panic("sched locks");
   }
   if(t->state == T_RUNNING)
@@ -1045,7 +1063,7 @@ kthread_create(uint64 start_func, uint64 stack)
 
   nt->state = T_RUNNABLE;
 
-  *(nt->trapframe) = *(t->trapframe);
+  *nt->trapframe = *t->trapframe;
 
   nt->trapframe->epc = (uint64)start_func;
 
@@ -1077,21 +1095,22 @@ kthread_exit(int status)
   int num_threads_running = 0;
   for (struct thread *t = p->p_threads; t < &p->p_threads[NTHREAD]; t++) {
     acquire(&t->lock);
-    if (t->state != T_UNUSED) {
+    if (t->tid != curr_t->tid && t->state != T_UNUSED && t->state != T_ZOMBIE) {
       num_threads_running++;
     }
     release(&t->lock);
   }
 
-  printf("num threads %d\n", num_threads_running);
+  printf("num threads %d tid %d\n", num_threads_running, curr_t->tid);
   //i am last thread running
-  if (num_threads_running == 1) {
+  if (num_threads_running == 0) {
     release(&p->lock);
     printf("releeasing last thread in kthread_exit\n");
     exit(status);
   }
 
   acquire(&curr_t->lock);
+  printf("turning tid %d into zombie\n", curr_t->tid);
   curr_t->xstate = status;
   curr_t->state = T_ZOMBIE;
 
