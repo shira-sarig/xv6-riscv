@@ -31,11 +31,16 @@ int sigprocmask(uint);
 int sigaction (int, const struct sigaction*, struct sigaction*);
 // 2.1.5 The sigret system call
 void sigret(void);
-
+// 3. Threads
 int kthread_create (void (*)(), void *);
 int kthread_id(void);
 void kthread_exit(int);
 int kthread_join(int, int*);
+// 4.a. binary semaphore
+int  bsem_alloc(void);
+void bsem_free(int);
+void bsem_down(int);
+void bsem_up(int);
 
 // ulib.c
 int stat(const char*, struct stat*);

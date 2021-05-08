@@ -176,3 +176,27 @@ sys_kthread_join(void)
 
   return kthread_join(thread_id, status);
 }
+
+uint64
+sys_bsem_alloc(void)
+{
+  return 0;
+}
+
+uint64
+sys_bsem_free(void)
+{
+  return 0;
+}
+
+uint64
+sys_bsem_down(void)
+{
+  return 0;
+}
+
+uint64
+sys_bsem_up(void)
+{
+  return 0;
+}

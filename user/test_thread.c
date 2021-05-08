@@ -4,33 +4,33 @@
 
 #define print(s) printf("%s\n", s);
 #define STACK_SIZE 4000
-
-void func_for_compiler() {
-    print("bla");
-}
-
-void func() {
-    int tid = kthread_id();
-   // printf("thread %d start\n", tid);
+#define NTHREADS 2
+int shared = 0;
+void func()
+{
     sleep(1);
-   // printf("thread %d end\n", tid);
-    kthread_exit(tid);
+    shared++;
+    kthread_exit(7);
 }
 
 int main(int argc, char *argv[])
 {
-    void* stack;
-
-    printf("HELLO TEST THREAD\n");
-    printf("address of func: %p\n", func);
-    printf("address of func_for_compiler: %p\n", func_for_compiler);
-    
-    for(int i=0; i<4; i++){
-        stack = malloc(STACK_SIZE);
-        kthread_create(func, stack);
+    int tids[NTHREADS];
+    void *stacks[NTHREADS];
+    for (int i = 0; i < NTHREADS; i++)
+    {
+        void *stack = malloc(STACK_SIZE);
+        tids[i] = kthread_create(func, stack);
+        stacks[i] = stack;
     }
 
-    sleep(10000);
-
+    for (int i = 0; i < NTHREADS; i++)
+    {
+        int status;
+        kthread_join(tids[i], &status);
+        free(stacks[i]);
+        printf("the status is: %d\n", status);
+    }
+    printf("%d\n", shared);
     exit(0);
 }
