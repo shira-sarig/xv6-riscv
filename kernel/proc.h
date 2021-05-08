@@ -147,4 +147,10 @@ struct sigaction {
   uint sigmask;
 };
 
+struct binary_semaphore {
+    int occupied;
+    int value;
+    struct spinlock lock;
+};
+
 void handle_signals();

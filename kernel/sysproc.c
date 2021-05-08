@@ -180,23 +180,44 @@ sys_kthread_join(void)
 uint64
 sys_bsem_alloc(void)
 {
-  return 0;
+  return bsem_alloc();
 }
 
 uint64
 sys_bsem_free(void)
 {
+  int descriptor;
+
+  if(argint(0, &descriptor) < 0)
+    return -1;
+  
+  bsem_free(descriptor);
+
   return 0;
 }
 
 uint64
 sys_bsem_down(void)
 {
+  int descriptor;
+
+  if(argint(0, &descriptor) < 0)
+    return -1;
+  
+  bsem_down(descriptor);
+
   return 0;
 }
 
 uint64
 sys_bsem_up(void)
 {
+  int descriptor;
+
+  if(argint(0, &descriptor) < 0)
+    return -1;
+  
+  bsem_up(descriptor);
+
   return 0;
 }

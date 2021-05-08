@@ -6,6 +6,10 @@
 #include "proc.h"
 #include "defs.h"
 
+#define MAX_BSEM 128
+
+struct binary_semaphore Bsemaphores[MAX_BSEM];
+
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
@@ -50,6 +54,12 @@ proc_mapstacks(pagetable_t kpgtbl) {
   }
 }
 
+void init_bsem_locks(){
+    for (struct binary_semaphore *bsem = Bsemaphores; bsem < &Bsemaphores[MAX_BSEM]; bsem++) {
+        initlock(&bsem->lock, "binary_semaphore");
+    }
+}
+
 // initialize the proc table at boot time.
 void
 procinit(void)
@@ -60,6 +70,7 @@ procinit(void)
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
   initlock(&tid_lock, "nexttid");
+  init_bsem_locks();
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
       for(t = p->p_threads; t < &p->p_threads[NTHREAD]; t++) {
@@ -1159,4 +1170,54 @@ kthread_join(int thread_id, int *status)
 
     release(&t_tojoin->lock);
     return 0;
+}
+
+
+int bsem_alloc() {
+
+    int descriptor;
+    int found = 0;
+    for (descriptor = 0; !found && descriptor < MAX_BSEM; descriptor++) {
+      acquire(&Bsemaphores[descriptor].lock);
+      if(!Bsemaphores[descriptor].occupied){
+          found = 1;
+          break;
+      }
+      release(&Bsemaphores[descriptor].lock);
+    }
+    if (!found) {
+        return -1;
+    }
+    Bsemaphores[descriptor].occupied = 1;
+    Bsemaphores[descriptor].value = 1; // the allocated semaphore in unlocked state
+    release(&Bsemaphores[descriptor].lock);
+    return descriptor;
+}
+
+void bsem_free(int descriptor) {
+    acquire(&Bsemaphores[descriptor].lock);
+    Bsemaphores[descriptor].occupied = 0;
+    // Bsemaphores[descriptor].value = 1;
+    release(&Bsemaphores[descriptor].lock);
+}
+
+void bsem_down(int descriptor) {
+    acquire(&Bsemaphores[descriptor].lock);
+    if (Bsemaphores[descriptor].occupied) {
+        while(Bsemaphores[descriptor].value == 0){
+            sleep(&Bsemaphores[descriptor], &Bsemaphores[descriptor].lock);
+        }
+        Bsemaphores[descriptor].value = 0;
+    }
+    release(&Bsemaphores[descriptor].lock);
+}
+
+void bsem_up(int descriptor) {
+    printf("in bsem up\n");
+    acquire(&Bsemaphores[descriptor].lock);
+    if (Bsemaphores[descriptor].occupied) {
+        Bsemaphores[descriptor].value = 1;
+        wakeup(&Bsemaphores[descriptor]);
+    }
+    release(&Bsemaphores[descriptor].lock);
 }
